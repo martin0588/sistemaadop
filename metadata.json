@@ -1,0 +1,5 @@
+{
+  "name": "Huellitas Bolivia",
+  "description": "Sistema de adopción de mascotas con roles de administrador, veterinario, voluntario y adoptante.",
+  "requestFramePermissions": []
+}
