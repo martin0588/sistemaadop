@@ -26,6 +26,10 @@ export default function AdoptionRequests({ user }: { user: User }) {
   const [notification, setNotification] = useState('');
   const [inactiveAdopters, setInactiveAdopters] = useState<number[]>([]);
 
+  const isAdmin = user.role === 'Administrador';
+  const isVolunteer = user.role === 'Voluntario';
+  const canManageAdoptions = isAdmin || isVolunteer;
+
   const fetchAdoptions = async () => {
     const res = await fetch('/api/adoptions');
     setAdoptions(await res.json());
@@ -41,6 +45,8 @@ export default function AdoptionRequests({ user }: { user: User }) {
   };
 
   const handleStatus = async (id: number, status: string, pet_id: number) => {
+    if (!isAdmin) return;
+
     await fetch(`/api/adoptions/${id}/status`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
@@ -90,6 +96,8 @@ export default function AdoptionRequests({ user }: { user: User }) {
   };
 
   const toggleAdopterStatus = (userId: number) => {
+    if (!isAdmin) return;
+
     setInactiveAdopters(prev =>
       prev.includes(userId)
         ? prev.filter(id => id !== userId)
@@ -236,49 +244,49 @@ export default function AdoptionRequests({ user }: { user: User }) {
                       Ver
                     </button>
 
-                    {a.status === 'Pendiente' &&
-                      (user.role === 'Administrador' || user.role === 'Voluntario') && (
-                        <>
-                          <button
-                            onClick={() => handleStatus(a.id, 'Aprobado', a.pet_id)}
-                            className="bg-emerald-500 text-white px-3 py-1.5 rounded-lg text-xs font-bold hover:bg-emerald-600 inline-flex items-center gap-1"
-                          >
-                            <CheckCircle2 size={14} />
-                            Aprobar
-                          </button>
-
-                          <button
-                            onClick={() => handleStatus(a.id, 'Rechazado', a.pet_id)}
-                            className="bg-rose-500 text-white px-3 py-1.5 rounded-lg text-xs font-bold hover:bg-rose-600 inline-flex items-center gap-1"
-                          >
-                            <XCircle size={14} />
-                            Rechazar
-                          </button>
-                        </>
-                      )}
-
-                    {a.status === 'Aprobado' &&
-                      (user.role === 'Administrador' || user.role === 'Voluntario') && (
+                    {a.status === 'Pendiente' && isAdmin && (
+                      <>
                         <button
-                          onClick={() => openFollowUps(a)}
-                          className="bg-blue-500 text-white px-3 py-1.5 rounded-lg text-xs font-bold hover:bg-blue-600 inline-flex items-center gap-1"
+                          onClick={() => handleStatus(a.id, 'Aprobado', a.pet_id)}
+                          className="bg-emerald-500 text-white px-3 py-1.5 rounded-lg text-xs font-bold hover:bg-emerald-600 inline-flex items-center gap-1"
                         >
-                          <History size={14} />
-                          Historial
+                          <CheckCircle2 size={14} />
+                          Aprobar
                         </button>
-                      )}
 
-                    <button
-                      onClick={() => toggleAdopterStatus(a.user_id)}
-                      className={`px-3 py-1.5 rounded-lg text-xs font-bold inline-flex items-center gap-1 ${
-                        adopterInactive
-                          ? 'bg-emerald-100 text-emerald-700 hover:bg-emerald-200'
-                          : 'bg-rose-100 text-rose-700 hover:bg-rose-200'
-                      }`}
-                    >
-                      <UserX size={14} />
-                      {adopterInactive ? 'Activar' : 'Inactivar'}
-                    </button>
+                        <button
+                          onClick={() => handleStatus(a.id, 'Rechazado', a.pet_id)}
+                          className="bg-rose-500 text-white px-3 py-1.5 rounded-lg text-xs font-bold hover:bg-rose-600 inline-flex items-center gap-1"
+                        >
+                          <XCircle size={14} />
+                          Rechazar
+                        </button>
+                      </>
+                    )}
+
+                    {a.status === 'Aprobado' && canManageAdoptions && (
+                      <button
+                        onClick={() => openFollowUps(a)}
+                        className="bg-blue-500 text-white px-3 py-1.5 rounded-lg text-xs font-bold hover:bg-blue-600 inline-flex items-center gap-1"
+                      >
+                        <History size={14} />
+                        Historial
+                      </button>
+                    )}
+
+                    {isAdmin && (
+                      <button
+                        onClick={() => toggleAdopterStatus(a.user_id)}
+                        className={`px-3 py-1.5 rounded-lg text-xs font-bold inline-flex items-center gap-1 ${
+                          adopterInactive
+                            ? 'bg-emerald-100 text-emerald-700 hover:bg-emerald-200'
+                            : 'bg-rose-100 text-rose-700 hover:bg-rose-200'
+                        }`}
+                      >
+                        <UserX size={14} />
+                        {adopterInactive ? 'Activar' : 'Inactivar'}
+                      </button>
+                    )}
                   </td>
                 </tr>
               );

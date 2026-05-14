@@ -25,12 +25,16 @@ export default function Navbar({ user, currentTab, setCurrentTab, onLogout }: { 
           { id: 'reports', label: 'Reportes', icon: FileText },
         ];
       case 'Veterinario':
-        return [{ id: 'pets', label: 'Pacientes', icon: Stethoscope }];
+  return [
+    { id: 'pets', label: 'Pacientes', icon: Stethoscope },
+    { id: 'users', label: 'Usuarios', icon: Users },
+  ];
       case 'Voluntario':
-        return [
-          { id: 'pets', label: 'Mascotas', icon: PawPrint },
-          { id: 'adoptions', label: 'Solicitudes', icon: ClipboardList },
-        ];
+  return [
+    { id: 'pets', label: 'Mascotas', icon: PawPrint },
+    { id: 'users', label: 'Usuarios', icon: Users },
+    { id: 'adoptions', label: 'Solicitudes', icon: ClipboardList },
+  ];
       case 'Adoptante':
         return [
           { id: 'pets', label: 'Adoptar', icon: Heart },
