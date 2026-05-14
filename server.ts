@@ -58,14 +58,25 @@ let nextFollowId = 2;
 
 async function initDB() {
   try {
-    const connection = await mysql.createConnection({ host: 'localhost', user: 'root', password: '' });
+    const connection = await mysql.createConnection({
+  host: '127.0.0.1',
+  user: 'root',
+  password: '',
+  port: 3307
+});
     await connection.query('CREATE DATABASE IF NOT EXISTS huellitas_bolivia');
     await connection.end();
 
     pool = mysql.createPool({
-      host: 'localhost', user: 'root', password: '', database: 'huellitas_bolivia',
-      waitForConnections: true, connectionLimit: 10, queueLimit: 0
-    });
+  host: '127.0.0.1',
+  user: 'root',
+  password: '',
+  database: 'huellitas_bolivia',
+  port: 3307,
+  waitForConnections: true,
+  connectionLimit: 10,
+  queueLimit: 0
+});
 
     await pool.query(`CREATE TABLE IF NOT EXISTS users (id INT AUTO_INCREMENT PRIMARY KEY, username VARCHAR(255) UNIQUE, password VARCHAR(255), role VARCHAR(50), full_name VARCHAR(255), email VARCHAR(255), profile_pic TEXT)`);
     
@@ -86,7 +97,7 @@ async function initDB() {
     }
     console.log("Base de datos MySQL inicializada correctamente.");
   } catch (error) {
-    console.log("MySQL no detectado. Usando base de datos en memoria (Mock) para la vista previa.");
+    console.log("MySQL no detectado.");
     useMock = true;
   }
 }
