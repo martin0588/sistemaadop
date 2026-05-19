@@ -2,10 +2,10 @@
 -- version 5.2.1
 -- https://www.phpmyadmin.net/
 --
--- Servidor: 127.0.0.1
--- Tiempo de generación: 14-05-2026 a las 16:47:13
+-- Servidor: 127.0.0.1:3307:3307
+-- Tiempo de generación: 19-05-2026 a las 14:00:24
 -- Versión del servidor: 10.4.32-MariaDB
--- Versión de PHP: 8.1.25
+-- Versión de PHP: 8.2.12
 
 SET SQL_MODE = "NO_AUTO_VALUE_ON_ZERO";
 START TRANSACTION;
@@ -161,18 +161,21 @@ CREATE TABLE `users` (
   `role` varchar(50) DEFAULT NULL,
   `full_name` varchar(255) DEFAULT NULL,
   `email` varchar(255) DEFAULT NULL,
-  `profile_pic` text DEFAULT NULL
+  `profile_pic` text DEFAULT NULL,
+  `email_verified` tinyint(4) DEFAULT 0,
+  `verification_code` varchar(10) DEFAULT NULL,
+  `verification_expires` datetime DEFAULT NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 --
 -- Volcado de datos para la tabla `users`
 --
 
-INSERT INTO `users` (`id`, `username`, `password`, `role`, `full_name`, `email`, `profile_pic`) VALUES
-(1, 'admin', '123', 'Administrador', 'Admin Principal', 'admin@huellitas.com', 'https://ui-avatars.com/api/?name=Admin+Principal&background=f59e0b&color=fff'),
-(2, 'vet', '123', 'Veterinario', 'Dr. Vet', 'vet@huellitas.com', 'https://ui-avatars.com/api/?name=Dr+Vet&background=14b8a6&color=fff'),
-(3, 'vol', '123', 'Voluntario', 'Voluntario 1', 'vol@huellitas.com', 'https://ui-avatars.com/api/?name=Voluntario+1&background=8b5cf6&color=fff'),
-(4, 'adopt', '123', 'Adoptante', 'Juan Perez', 'juan@gmail.com', 'https://ui-avatars.com/api/?name=Juan+Perez&background=f43f5e&color=fff');
+INSERT INTO `users` (`id`, `username`, `password`, `role`, `full_name`, `email`, `profile_pic`, `email_verified`, `verification_code`, `verification_expires`) VALUES
+(1, 'admin', '123', 'Administrador', 'Admin Principal', 'admin@huellitas.com', 'https://ui-avatars.com/api/?name=Admin+Principal&background=f59e0b&color=fff', 1, NULL, NULL),
+(2, 'vet', '123', 'Veterinario', 'Dr. Vet', 'vet@huellitas.com', 'https://ui-avatars.com/api/?name=Dr+Vet&background=14b8a6&color=fff', 1, NULL, NULL),
+(3, 'vol', '123', 'Voluntario', 'Voluntario 1', 'vol@huellitas.com', 'https://ui-avatars.com/api/?name=Voluntario+1&background=8b5cf6&color=fff', 1, NULL, NULL),
+(4, 'adopt', '123', 'Adoptante', 'Juan Perez', 'juan@gmail.com', 'https://ui-avatars.com/api/?name=Juan+Perez&background=f43f5e&color=fff', 1, NULL, NULL);
 
 --
 -- Índices para tablas volcadas
@@ -258,7 +261,7 @@ ALTER TABLE `pets`
 -- AUTO_INCREMENT de la tabla `users`
 --
 ALTER TABLE `users`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=5;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=21;
 
 --
 -- Restricciones para tablas volcadas
