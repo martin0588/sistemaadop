@@ -1,8 +1,10 @@
+import 'dotenv/config';
 import express from 'express';
 import cors from 'cors';
 import mysql from 'mysql2/promise';
 import { createServer as createViteServer } from 'vite';
 import path from 'path';
+import nodemailer from 'nodemailer';
 
 const app = express();
 app.use(cors());
@@ -11,8 +13,15 @@ app.use(express.json());
 let pool: mysql.Pool | null = null;
 let useMock = false;
 
+const transporter = nodemailer.createTransport({
+  service: 'gmail',
+  auth: {
+    user: process.env.EMAIL_USER,
+    pass: process.env.EMAIL_PASS,
+  },
+});
 // --- MOCK DATA FOR AI STUDIO PREVIEW ---
-let mockUsers = [
+let mockUsers: any[] = [
   { id: 1, username: 'admin', password: '123', role: 'Administrador', full_name: 'Admin Principal', email: 'admin@huellitas.com', profile_pic: 'https://ui-avatars.com/api/?name=Admin+Principal&background=f59e0b&color=fff' },
   { id: 2, username: 'vet', password: '123', role: 'Veterinario', full_name: 'Dr. Vet', email: 'vet@huellitas.com', profile_pic: 'https://ui-avatars.com/api/?name=Dr+Vet&background=14b8a6&color=fff' },
   { id: 3, username: 'vol', password: '123', role: 'Voluntario', full_name: 'Voluntario 1', email: 'vol@huellitas.com', profile_pic: 'https://ui-avatars.com/api/?name=Voluntario+1&background=8b5cf6&color=fff' },
@@ -82,6 +91,9 @@ async function initDB() {
     
     // Intentar añadir la columna si la tabla ya existía de antes
     try { await pool.query('ALTER TABLE users ADD COLUMN profile_pic TEXT'); } catch (e) {}
+    try { await pool.query('ALTER TABLE users ADD COLUMN email_verified TINYINT DEFAULT 1'); } catch (e) {}
+    try { await pool.query('ALTER TABLE users ADD COLUMN verification_code VARCHAR(10)'); } catch (e) {}
+    try { await pool.query('ALTER TABLE users ADD COLUMN verification_expires DATETIME'); } catch (e) {}
 
     await pool.query(`CREATE TABLE IF NOT EXISTS pets (id INT AUTO_INCREMENT PRIMARY KEY, name VARCHAR(255), species VARCHAR(100), breed VARCHAR(100), age INT, status VARCHAR(50), image_url TEXT, vet_notes TEXT)`);
     await pool.query(`CREATE TABLE IF NOT EXISTS adoptions (id INT AUTO_INCREMENT PRIMARY KEY, pet_id INT, user_id INT, status VARCHAR(50), request_date DATETIME DEFAULT CURRENT_TIMESTAMP, FOREIGN KEY (pet_id) REFERENCES pets(id), FOREIGN KEY (user_id) REFERENCES users(id))`);
@@ -106,37 +118,246 @@ async function initDB() {
 
 app.post('/api/login', async (req, res) => {
   const { username, password } = req.body;
+
   if (useMock) {
     const user = mockUsers.find(u => u.username === username && u.password === password);
-    if (user) return res.json({ success: true, user: { id: user.id, username: user.username, role: user.role, full_name: user.full_name, email: user.email, profile_pic: user.profile_pic } });
-    return res.status(401).json({ success: false, message: 'Credenciales inválidas' });
+
+    if (!user) {
+      return res.status(401).json({
+        success: false,
+        message: 'Credenciales inválidas',
+      });
+    }
+
+    if (user.email_verified === 0) {
+      return res.status(403).json({
+        success: false,
+        needsVerification: true,
+        email: user.email,
+        message: 'Debes verificar tu correo antes de iniciar sesión',
+      });
+    }
+
+    return res.json({
+      success: true,
+      user: {
+        id: user.id,
+        username: user.username,
+        role: user.role,
+        full_name: user.full_name,
+        email: user.email,
+        profile_pic: user.profile_pic,
+      },
+    });
   }
+
   try {
-    const [rows] = await pool!.execute('SELECT id, username, role, full_name, email, profile_pic FROM users WHERE username = ? AND password = ?', [username, password]);
+    const [rows] = await pool!.execute(
+      'SELECT id, username, role, full_name, email, profile_pic, email_verified FROM users WHERE username = ? AND password = ?',
+      [username, password]
+    );
+
     const users = rows as any[];
-    if (users.length > 0) res.json({ success: true, user: users[0] });
-    else res.status(401).json({ success: false, message: 'Credenciales inválidas' });
-  } catch (e) { res.status(500).json({ success: false, message: 'Error del servidor' }); }
+
+    if (users.length > 0 && users[0].email_verified === 0) {
+      return res.status(403).json({
+        success: false,
+        needsVerification: true,
+        email: users[0].email,
+        message: 'Debes verificar tu correo antes de iniciar sesión',
+      });
+    }
+
+    if (users.length > 0) {
+      return res.json({ success: true, user: users[0] });
+    }
+
+    return res.status(401).json({
+      success: false,
+      message: 'Credenciales inválidas',
+    });
+  } catch (e) {
+    console.error('Error en login:', e);
+    return res.status(500).json({
+      success: false,
+      message: 'Error del servidor',
+    });
+  }
 });
 
 app.post('/api/register', async (req, res) => {
   const { full_name, email, username, password } = req.body;
   const profile_pic = `https://ui-avatars.com/api/?name=${encodeURIComponent(full_name)}&background=f43f5e&color=fff`;
+  const verificationCode = Math.floor(100000 + Math.random() * 900000).toString();
+  const expires = new Date(Date.now() + 1000 * 60 * 10);
+
   if (useMock) {
-    if (mockUsers.find(u => u.username === username)) return res.status(400).json({ success: false, message: 'El usuario ya existe' });
-    const newUser = { id: nextUserId++, username, password, role: 'Adoptante', full_name, email, profile_pic };
+    if (mockUsers.find(u => u.username === username)) {
+      return res.status(400).json({
+        success: false,
+        message: 'El usuario ya existe',
+      });
+    }
+
+    const newUser = {
+      id: nextUserId++,
+      username,
+      password,
+      role: 'Adoptante',
+      full_name,
+      email,
+      profile_pic,
+      email_verified: 0,
+      verification_code: verificationCode,
+      verification_expires: expires,
+    };
+
     mockUsers.push(newUser);
-    return res.json({ success: true, user: { id: newUser.id, username: newUser.username, role: newUser.role, full_name: newUser.full_name, email: newUser.email, profile_pic: newUser.profile_pic } });
+
+    return res.json({
+      success: true,
+      needsVerification: true,
+      email,
+      message: 'Registro exitoso. Verifica tu correo.',
+    });
   }
+
   try {
     const [result] = await pool!.execute(
-      'INSERT INTO users (username, password, role, full_name, email, profile_pic) VALUES (?, ?, ?, ?, ?, ?)',
-      [username, password, 'Adoptante', full_name, email, profile_pic]
+      `INSERT INTO users
+      (username, password, role, full_name, email, profile_pic, email_verified, verification_code, verification_expires)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        username,
+        password,
+        'Adoptante',
+        full_name,
+        email,
+        profile_pic,
+        0,
+        verificationCode,
+        expires,
+      ]
     );
-    res.json({ success: true, user: { id: (result as any).insertId, username, role: 'Adoptante', full_name, email, profile_pic } });
-  } catch (e: any) { 
-    if (e.code === 'ER_DUP_ENTRY') return res.status(400).json({ success: false, message: 'El usuario ya existe' });
-    res.status(500).json({ success: false, message: 'Error del servidor' }); 
+
+    await transporter.sendMail({
+      from: process.env.EMAIL_USER,
+      to: email,
+      subject: 'Código de verificación - Huellitas Bolivia',
+      html: `
+        <div style="font-family: Arial, sans-serif; padding: 20px; color: #333;">
+          <h2 style="color:#d97706;">Huellitas Bolivia</h2>
+          <p>Hola ${full_name},</p>
+          <p>Tu código de verificación es:</p>
+          <h1 style="letter-spacing: 6px; background:#fef3c7; padding:16px; border-radius:12px; display:inline-block;">${verificationCode}</h1>
+          <p>Este código expira en 10 minutos.</p>
+        </div>
+      `,
+    });
+
+    return res.json({
+      success: true,
+      needsVerification: true,
+      email,
+      userId: (result as any).insertId,
+      message: 'Registro exitoso. Revisa tu correo.',
+    });
+  } catch (e: any) {
+    if (e.code === 'ER_DUP_ENTRY') {
+      return res.status(400).json({
+        success: false,
+        message: 'El usuario ya existe',
+      });
+    }
+
+    console.error('Error en registro:', e);
+    return res.status(500).json({
+      success: false,
+      message: 'Error del servidor',
+    });
+  }
+});
+
+app.post('/api/verify-email', async (req, res) => {
+  const { email, code } = req.body;
+
+  if (!email || !code) {
+    return res.status(400).json({
+      success: false,
+      message: 'Correo y código son requeridos',
+    });
+  }
+
+  if (useMock) {
+    const user = mockUsers.find(u => u.email === email && u.verification_code === code);
+
+    if (!user) {
+      return res.status(400).json({
+        success: false,
+        message: 'Código incorrecto',
+      });
+    }
+
+    if (new Date(user.verification_expires) < new Date()) {
+      return res.status(400).json({
+        success: false,
+        message: 'El código expiró',
+      });
+    }
+
+    user.email_verified = 1;
+    user.verification_code = null;
+    user.verification_expires = null;
+
+    return res.json({
+      success: true,
+      message: 'Correo verificado correctamente',
+    });
+  }
+
+  try {
+    const [rows] = await pool!.execute(
+      `SELECT id, verification_expires
+       FROM users
+       WHERE email = ? AND verification_code = ?`,
+      [email, code]
+    );
+
+    const users = rows as any[];
+
+    if (users.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: 'Código incorrecto',
+      });
+    }
+
+    const selectedUser = users[0];
+
+    if (new Date(selectedUser.verification_expires) < new Date()) {
+      return res.status(400).json({
+        success: false,
+        message: 'El código expiró',
+      });
+    }
+
+    await pool!.execute(
+      `UPDATE users
+       SET email_verified = 1, verification_code = NULL, verification_expires = NULL
+       WHERE id = ?`,
+      [selectedUser.id]
+    );
+
+    return res.json({
+      success: true,
+      message: 'Correo verificado correctamente',
+    });
+  } catch (e) {
+    console.error('Error al verificar correo:', e);
+    return res.status(500).json({
+      success: false,
+      message: 'Error del servidor',
+    });
   }
 });
 
@@ -153,7 +374,7 @@ app.put('/api/users/:id', async (req, res) => {
   }
   try {
     await pool!.execute('UPDATE users SET full_name = ?, email = ?, profile_pic = ? WHERE id = ?', [full_name, email, profile_pic, id]);
-    const [rows] = await pool!.execute('SELECT id, username, role, full_name, email, profile_pic FROM users WHERE id = ?', [id]);
+    const [rows] = await pool!.execute('SELECT id, username, role, full_name, email, profile_pic, email_verified FROM users WHERE id = ?', [id]);
     res.json({ success: true, user: (rows as any[])[0] });
   } catch (e) { res.status(500).json({ success: false, message: 'Error del servidor' }); }
 });
@@ -161,7 +382,7 @@ app.put('/api/users/:id', async (req, res) => {
 app.get('/api/users', async (req, res) => {
   if (useMock) return res.json(mockUsers.map(u => ({ id: u.id, username: u.username, role: u.role, full_name: u.full_name, email: u.email, profile_pic: u.profile_pic })));
   try {
-    const [rows] = await pool!.query('SELECT id, username, role, full_name, email, profile_pic FROM users ORDER BY id DESC');
+    const [rows] = await pool!.query('SELECT id, username, role, full_name, email, profile_pic, email_verified FROM users ORDER BY id DESC');
     res.json(rows);
   } catch (e) { res.status(500).json({ success: false, message: 'Error del servidor' }); }
 });
@@ -174,7 +395,7 @@ app.get('/api/users/:id', async (req, res) => {
     return res.status(404).json({ success: false, message: 'Usuario no encontrado' });
   }
   try {
-    const [rows] = await pool!.query('SELECT id, username, role, full_name, email, profile_pic FROM users WHERE id = ?', [id]) as any;
+    const [rows] = await pool!.query('SELECT id, username, role, full_name, email, profile_pic, email_verified FROM users WHERE id = ?', [id]) as any;
     if (rows.length > 0) return res.json(rows[0]);
     res.status(404).json({ success: false, message: 'Usuario no encontrado' });
   } catch (e) { res.status(500).json({ success: false, message: 'Error del servidor' }); }
@@ -204,6 +425,47 @@ app.put('/api/users/:id/role', async (req, res) => {
     await pool!.execute('UPDATE users SET role = ? WHERE id = ?', [role, id]);
     res.json({ success: true });
   } catch (e) { res.status(500).json({ success: false, message: 'Error del servidor' }); }
+});
+
+app.put('/api/users/:id/reset-password', async (req, res) => {
+  const id = parseInt(req.params.id);
+
+  const temporaryPassword = '123';
+
+  if (useMock) {
+    const user = mockUsers.find(u => u.id === id);
+
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: 'Usuario no encontrado',
+      });
+    }
+
+    user.password = temporaryPassword;
+
+    return res.json({
+      success: true,
+      temporaryPassword,
+    });
+  }
+
+  try {
+    await pool!.execute(
+      'UPDATE users SET password = ? WHERE id = ?',
+      [temporaryPassword, id]
+    );
+
+    res.json({
+      success: true,
+      temporaryPassword,
+    });
+  } catch (e) {
+    res.status(500).json({
+      success: false,
+      message: 'Error del servidor',
+    });
+  }
 });
 
 app.get('/api/pets', async (req, res) => {

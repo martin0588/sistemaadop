@@ -1,4 +1,8 @@
-export type Role = 'Administrador' | 'Veterinario' | 'Voluntario' | 'Adoptante';
+export type Role =
+  | 'Administrador'
+  | 'Veterinario'
+  | 'Voluntario'
+  | 'Adoptante';
 
 export interface User {
   id: number;
@@ -7,6 +11,7 @@ export interface User {
   full_name?: string;
   email?: string;
   profile_pic?: string;
+  active?: boolean;
 }
 
 export interface Pet {
