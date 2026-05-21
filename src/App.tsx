@@ -16,12 +16,20 @@ import UserProfile from './modules/comun/gestion-personal/UserProfile';
 import NotificationsAdmin from './modules/reportes/NotificationsAdmin';
 import SystemReports from './modules/reportes/SystemReports';
 import VerifyEmailScreen from './components/auth/VerifyEmailScreen';
+import ForgotPasswordScreen from './components/auth/ForgotPasswordScreen';
 
 import { User } from './types';
 import { hasAccess } from './permissions';
 
 export default function App() {
-  const [view, setView] = useState<'landing' | 'login' | 'register' | 'verify' | 'app'>('landing');
+  const [view, setView] = useState<
+  'landing' |
+  'login' |
+  'register' |
+  'verify' |
+  'forgot-password' |
+  'app'
+>('landing');
 const [pendingEmail, setPendingEmail] = useState('');
 
   const [user, setUser] = useState<User | null>(null);
@@ -95,6 +103,14 @@ const [pendingEmail, setPendingEmail] = useState('');
   return null;
 }
 
+if (view === 'forgot-password') {
+  return (
+    <ForgotPasswordScreen
+      onBack={() => setView('login')}
+    />
+  );
+}
+
 if (data.success) {
   setUser(data.user);
   setView('app');
@@ -127,6 +143,7 @@ if (data.success) {
       <LoginScreen
         onLogin={handleLogin}
         onBack={() => setView('landing')}
+        onForgotPassword={() => setView('forgot-password')}
       />
     );
   }
@@ -145,6 +162,14 @@ if (data.success) {
       email={pendingEmail}
       onVerified={() => setView('login')}
       onBack={() => setView('register')}
+    />
+  );
+}
+
+if (view === 'forgot-password') {
+  return (
+    <ForgotPasswordScreen
+      onBack={() => setView('login')}
     />
   );
 }
